@@ -13,10 +13,10 @@ Classification using a Transformer model on the FordA dataset, and forecasting u
 2. [Notebooks](#notebooks)
 3. [Datasets](#datasets)
 4. [Model Architectures](#model-architectures)
-5. [Task 1 — Baseline Results](#task-1--baseline-results)
-6. [Task 2 — Improvement Experiments (LSTM)](#task-2--improvement-experiments-lstm)
-7. [Task 3 — Benchmark Summary](#task-3--benchmark-summary)
-8. [Task 4 — Discussion Questions](#task-4--discussion-questions)
+5. [Task 1: Baseline Results](#task-1--baseline-results)
+6. [Task 2: Improvement Experiments (LSTM)](#task-2--improvement-experiments-lstm)
+7. [Task 3 : Benchmark Summary](#task-3--benchmark-summary)
+8. [Task 4: Discussion Questions](#task-4--discussion-questions)
 
 ---
 
@@ -36,15 +36,15 @@ python3 -m pip install -r requirements.txt
 
    a. Click the kernel selector in the top right corner:
 
-   ![Select Kernel](Images/SelectKernel.png)
+   ![Select Kernel](Images/readme_images/SelectKernel.png)
 
    b. Click **Python Environments**:
 
-   ![Select Kernel](Images/PythonEnv.png)
+   ![Select Kernel](Images/readme_images/PythonEnv.png)
 
    c. Select the `.venv` environment that was just created:
 
-   ![Select Kernel](Images/.venv.png)
+   ![Select Kernel](Images/readme_images/.venv.png)
 
 ---
 
@@ -62,10 +62,13 @@ python3 -m pip install -r requirements.txt
 ### FordA: Engine Noise Classification
 
 - **Source:** UCR Time Series Archive (hosted on GitHub by [hfawaz](https://github.com/hfawaz/cd-diagram))
-- **Task:** Binary classification — detect abnormal engine noise (class 0 or 1)
+- **Task:** Binary classification - detect abnormal engine noise
 - **Format:** Each sample is a univariate time series of 500 timesteps
-- **Train size:** 3,601 samples | **Test size:** 1,320 samples
-- **Classes:** 2 (originally labelled −1 and +1, remapped to 0 and 1)
+- **Data Splits:**
+  - **Training Set:** 3,601 samples
+  - **Test Set:** 1,320 samples
+- **Classes:** 2 
+  - Originally labelled −1 and +1 and remapped to 0 and 1
 - **Input shape per sample:** `(500, 1)`
 
 ### Jena Climate: Weather Forecasting
@@ -73,7 +76,10 @@ python3 -m pip install -r requirements.txt
 - **Source:** [Max Planck Institute for Biogeochemistry](https://www.bgc-jena.mpg.de/wetter/)
 - **Task:** Regression — predict temperature 12 hours into the future
 - **Format:** 14 meteorological features recorded every 10 minutes from Jan 2009 – Dec 2016
-- **Total rows:** ~420,551 | **Used for training:** ~300,693 (71.5%)
+- **Data Splits:**
+  - **Total rows:** ~420,551 
+  - **Training rows:** ~300,693 (71.5%)
+  - **Testing rows:** ~119,858 (28.5%)
 - **Selected features (7):** 
   - Pressure, 
   - Temperature, 
@@ -82,7 +88,7 @@ python3 -m pip install -r requirements.txt
   - Specific humidity, 
   - Airtight, 
   - Wind speed
-- **Input window:** 720 observations (5 days, sampled every 60 min → 120 steps)
+- **Input window:** 720 observations (5 days, sampled every 60 min; 120 steps)
 - **Prediction horizon:** 72 observations ahead (12 hours)
 - **Input shape per sample:** `(120, 7)`
 
@@ -119,7 +125,8 @@ Input (batch, 500, 1)
 - **Loss:** Sparse categorical crossentropy
 - **Metric:** Sparse categorical accuracy
 - **Callbacks:** EarlyStopping (patience=10, restore best weights)
-- **Max epochs:** 150 | **Batch size:** 64
+- **Max epochs:** 150 
+  - **Batch size:** 64
 
 
 ### Forecasting LSTM
@@ -136,12 +143,15 @@ Input (batch, 120, 7)
 - **Parameters:** ~5k
 - **Optimizer:** Adam (lr = 0.001)
 - **Loss:** Mean Squared Error (MSE)
-- **Callbacks:** EarlyStopping (patience=5), ModelCheckpoint (best val_loss)
-- **Max epochs:** 10 | **Batch size:** 256
+- **Callbacks:** 
+  - EarlyStopping (patience=5)
+  - ModelCheckpoint (best val_loss)
+- **Max epochs:** 10
+  - **Batch size:** 256
 
 ---
 
-## Task 1 — Baseline Results
+## Task 1: Baseline Results
 
 ### Transformer Baseline (FordA Classification)
 
@@ -174,7 +184,7 @@ All values are computed on normalized features (zero mean, unit variance compute
 **Key observations:**
 - Despite having only ~5k parameters, the single-layer LSTM achieves a reasonable MSE on this 7-feature, 120-step sequence task.
 - Training converges quickly (within 10 epochs), suggesting the problem is not particularly hard for this horizon (12 hours) and that a small hidden state is sufficient to capture the dominant temperature dynamics.
-- The prediction plots show accurate tracking of the general trend, with some lag at sharp temperature transitions — a known limitation of fixed-horizon single-step LSTM forecasters.
+- The prediction plots show accurate tracking of the general trend, with some lag at sharp temperature transitions. This is a known limitation of fixed-horizon single-step LSTM forecasters.
 
 ---
 
@@ -257,7 +267,7 @@ optimizer=keras.optimizers.Adam(learning_rate=0.0005)
 
 ## Task 3: Benchmark Summary
 
-### Full Comparison Table — LSTM Forecasting (Jena Climate)
+### LSTM Forecasting Comparison Table (Jena Climate)
 
 | Experiment | Modification | Val Loss (MSE) | Parameters | Epochs |
 |---|---|---|---|---|
@@ -291,7 +301,7 @@ The Transformer was not modified as the improvement task focused on the LSTM not
 
 I found the LSTM model was easier to understand. Its architecture is linear and follows a single intuitive path, a recurrent layer processes the sequence step-by-step, building up a hidden state that summarizes past observations, and then a Dense layer maps that hidden state to a single output value. The connection between the model structure and the task (predicting future temperature from past readings) is immediately clear.
 
-The Transformer was more conceptually demanding. Multi-head self-attention requires understanding how queries, keys, and values are computed and combined — and why this allows any timestep to directly attend to any other regardless of distance. The Pre-LN residual structure, positional independence, and the role of the 1D convolutions as a position-wise feed-forward network all require more background knowledge to internalize. That said, once understood, the Transformer's architecture is modular and elegant: each encoder block is identical and can be stacked freely.
+The Transformer was more conceptually demanding. Multi-head self-attention requires understanding how queries, keys, and values are computed and combined, and why this allows any timestep to directly attend to any other regardless of distance. The Pre-LN residual structure, positional independence, and the role of the 1D convolutions as a position-wise feed-forward network all require more background knowledge to internalize. That said, once understood, the Transformer's architecture is quite modular and impressive, where each encoder block is identical and can be stacked freely.
 
 ### What improvement did you try, and what did you learn from it?
 
@@ -299,7 +309,7 @@ The primary improvement was **stacking two LSTM layers** (Experiment 1). This mo
 
 The key insight was that a single recurrent layer must compress the entire temporal pattern into one hidden state transition per step, which can be a bottleneck when the input sequence contains multiple levels of structure (e.g., short-term hourly variation and longer multi-day trends). Adding a second LSTM layer allows the first layer to produce a richer intermediate representation (passed along via `return_sequences=True`), and the second layer to summarize higher-order patterns across those intermediate features.
 
-The experiment also showed that deeper is not always better in direct proportion to parameter count — Experiment 2 used more parameters (18k vs 13k for the stacked model) but achieved a smaller improvement. This illustrates that **how capacity is structured** (depth vs. width) matters as much as the total number of parameters.
+The experiment also showed that deeper is not always better in direct proportion to parameter count as Experiment 2 used more parameters (18k vs 13k for the stacked model) but achieved a smaller improvement. This illustrates that **how capacity is structured** (depth vs. width) matters as much as the total number of parameters.
 
 ---
 
