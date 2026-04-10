@@ -83,7 +83,7 @@ python3.11 -m pip install -r requirements.txt
 ### Jena Climate: Weather Forecasting
 
 - **Source:** [Max Planck Institute for Biogeochemistry](https://www.bgc-jena.mpg.de/wetter/)
-- **Task:** Regression — predict temperature 12 hours into the future
+- **Task:** Regression model to predict temperature 12 hours into the future
 - **Format:** 14 meteorological features recorded every 10 minutes from Jan 2009 – Dec 2016
 - **Data Splits:**
   - **Total rows:** ~420,551 
@@ -129,7 +129,7 @@ Input (batch, 500, 1)
     └── Dense (2, softmax)
 ```
 
-- **Parameters:** ~97k
+- **Parameters:** 29,258
 - **Optimizer:** Adam (lr = 1e-4)
 - **Loss:** Sparse categorical crossentropy
 - **Metric:** Sparse categorical accuracy
@@ -149,7 +149,7 @@ Input (batch, 120, 7)
     └── Dense (1)  ← predicted temperature (normalized)
 ```
 
-- **Parameters:** ~5k
+- **Parameters:** 5,153
 - **Optimizer:** Adam (lr = 0.001)
 - **Loss:** Mean Squared Error (MSE)
 - **Callbacks:** 
@@ -186,20 +186,20 @@ The model **did not converge** in this local run. The loss remained at ~0.693 (l
 | Training Loss (MSE, final epoch) | 0.1033 |
 | **Best Validation Loss (MSE)** | **0.1340** |
 | Best epoch | 2 of 7 |
-| Total parameters | ~5,153 |
+| Total parameters | 5153 |
 
 All values are computed on normalized features (zero mean, unit variance computed from training set only).
 
 **Key observations:**
-- The model converged very quickly: the best val_loss (0.1340) was reached at epoch 2, and early stopping halted training at epoch 7 after 5 consecutive non-improving epochs.
-- Despite having only ~5k parameters, the single-layer LSTM achieves a reasonable MSE on this 7-feature, 120-step forecasting task.
-- The early peak at epoch 2 followed by rising val_loss is a sign of mild overshoot — the lr=0.001 step size is slightly too large for this model to settle cleanly, which the Experiment 3 results confirm directly.
+- The model converged very quickly: the best validation loss (0.1340) was reached at epoch 2, and early stopping halted training at epoch 7 after 5 consecutive non-improving epochs.
+- Despite having only 5153 parameters, the single-layer LSTM achieves a reasonable MSE on this 7-feature, 120-step forecasting task.
+- The early peak at epoch 2 followed by rising validation loss is a sign of mild overshoot. The lr=0.001 step size is slightly too large for this model to settle cleanly, which the Experiment 3 results confirm directly.
 
 ---
 
-## Task 2: Improvement Experiments (LSTM)
+## Task 2: LSTM Improvement Experiments
 
-Three controlled modifications were applied to the LSTM forecasting model, one at a time, to isolate each effect. All other hyperparameters remain identical to the baseline.
+Three controlled modifications were applied to the LSTM forecasting model, done one at a time in order to isolate each effect. All other hyperparameters remain identical to the baseline.
 
 ### Experiment 1: Stacked LSTM (Two Layers)
 
@@ -219,14 +219,15 @@ lstm_out = keras.layers.LSTM(32)(x)
 | Metric | Baseline | Stacked LSTM |
 |---|---|---|
 | Val Loss (MSE) | 0.1340 | **0.1254** |
-| Parameters | ~5k | ~13k |
+| Parameters | 5153 | 13 473 |
 | Best epoch | 2 of 7 | 10 of 10 |
 
-**Observation:** Stacking a second LSTM layer reduced val loss by 6.4%, using 2.6× more parameters. Notably, the stacked model was still improving at epoch 10 when the training budget ran out (the baseline peaked at epoch 2), so the true best is likely lower still. The improvement suggests the second layer successfully encodes higher-order temporal structure — patterns across patterns — that the single hidden state cannot represent.
+
+**Observation:** Stacking a second LSTM layer reduced val loss by 6.4%, by using 2.6× more parameters. Notably, the stacked model was still improving at epoch 10 when the training budget ran out (the baseline peaked at epoch 2), so the true best is likely lower still. The improvement suggests the second layer successfully encodes higher-order temporal structure, patterns across patterns, that the single hidden state cannot represent.
 
 ---
 
-### Experiment 2: Larger Hidden Size (LSTM 64)
+### Experiment 2: Larger Hidden Size
 
 **Change:** Increase the LSTM hidden units from 32 to 64.
 
@@ -243,10 +244,11 @@ lstm_out = keras.layers.LSTM(64)(inputs)
 | Metric | Baseline | LSTM (64 units) |
 |---|---|---|
 | Val Loss (MSE) | 0.1340 | 0.1356 |
-| Parameters | ~5k | ~18k |
+| Parameters | 5153 | 18 497 |
 | Best epoch | 2 of 7 | 10 of 10 |
 
-**Observation:** LSTM(64) was marginally worse than the baseline (+1.1%), but the key detail is in the convergence pattern. The baseline peaked at epoch 2 and degraded — it converged fast but to a slightly overshot minimum. LSTM(64) was still steadily improving through all 10 epochs when the budget ran out. This tells a different story than "the wider model is worse": it is actually converging to a competitive solution, just more slowly because a larger parameter space takes more gradient steps to organize.
+
+**Observation:** LSTM(64) was marginally worse than the baseline as it increased the validation loss by +1.1%. However, the key detail is in the convergence pattern. The baseline peaked at epoch 2 and degraded, meaning that it converged fast but to a slightly overshot minimum. LSTM(64) was still steadily improving through all 10 epochs when the budget ran out. This tells a different story than "the wider model is worse": it is actually converging to a competitive solution, just more slowly because a larger parameter space takes more gradient steps to organize.
 
 **Why didn't it help within the 10-epoch budget?** LSTM(64) has ~3.5× more parameters than LSTM(32). With the same learning rate (0.001) and the same number of epochs, each parameter receives fewer effective update steps relative to the complexity it needs to fit. The baseline LSTM(32) can "fill in" its simpler representation quickly; LSTM(64) needs more time to leverage its extra capacity. Given 20–30 epochs, LSTM(64) would likely surpass the baseline. The take-away is that **adding model capacity requires increasing the training budget proportionally**, especially when the learning rate is unchanged.
 
