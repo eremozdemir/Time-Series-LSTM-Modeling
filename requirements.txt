@@ -3,3 +3,5 @@ keras
 tensorflow>=2.15.0
 pandas
 matplotlib
+scikit-learn
+ipykernel
