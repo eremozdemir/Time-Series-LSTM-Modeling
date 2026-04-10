@@ -166,44 +166,66 @@ Input (batch, 120, 7)
 
 | Metric | This Run | Keras Reference |
 |---|---|---|
-| Training Accuracy | ~49.2% | ~95% |
-| Validation Accuracy (best) | ~52.3% | ~84% |
+| Training Accuracy | ~49.8% | ~95% |
+| Validation Accuracy (best) | ~49.4% | ~84% |
 | **Test Accuracy** | **~51.6%** | **~85%** |
-| Epochs run (early stopped) | 48 | ~110–120 |
-| Total parameters | ~97,000 | ~97,000 |
+| Epochs run (early stopped) | 11 | ~110–120 |
+| Total parameters | 29,258 | ~97,000 |
 
-The model **did not converge** in this local run. The loss remained at ~0.693 (ln(2)) throughout all 48 epochs, indicating the model produced random binary predictions throughout. Early stopping triggered after 48 epochs once val_loss showed no improvement for 10 consecutive epochs.
+The model **did not converge** in this local run. The loss remained at ~0.693 (ln(2)) throughout all 11 epochs, indicating the model produced random binary predictions throughout. Early stopping triggered after epoch 11 once val_loss showed no improvement for 10 consecutive epochs.
 
 **Key observations:**
-- A constant loss of ~0.693 equals ln(2) — the cross-entropy of a perfectly uniform binary classifier. The model was learning nothing and outputting 50/50 class probabilities every epoch.
-- This is expected when running a 97k-parameter Transformer on CPU with lr=1e-4 and no warm-up schedule. Gradients at initialization are small and require many batches on fast hardware to accumulate meaningful signal.
-- The Keras reference results (~85% test accuracy) are reproducible on Colab with GPU over ~110–120 epochs. The model architecture is correct; the issue is the training environment and compute budget.
+- A constant loss of ~0.693 equals ln(2) — the cross-entropy of a perfectly uniform binary classifier. The model was learning nothing and outputting ~50/50 class probabilities every epoch.
+- This is expected when running a Transformer on CPU with lr=1e-4 and no warm-up schedule. Gradients at initialization are small and require many steps on fast hardware to accumulate meaningful signal.
+- The Keras reference results (~85% test accuracy) are reproducible on Colab with GPU over ~110–120 epochs. The architecture is correct; the issue is the training environment.
+- The parameter count (29,258) is lower than the ~97k cited in the Keras reference due to Keras version differences in how MultiHeadAttention fuses projections. The model structure is unchanged.
 
 ### LSTM Baseline (Jena Climate Forecasting)
 
 | Metric | Value |
 |---|---|
-| Training Loss (MSE, final epoch) | 0.1033 |
-| **Best Validation Loss (MSE)** | **0.1340** |
-| Best epoch | 2 of 7 |
-| Total parameters | 5153 |
+| Training Loss (MSE, final epoch) | 0.1003 |
+| **Best Validation Loss (MSE)** | **0.1334** |
+| Best epoch | 10 of 10 (hit budget) |
+| Total parameters | 5,153 |
 
-All values are computed on normalized features (zero mean, unit variance computed from training set only).
+All values are computed on normalized features (zero mean, unit variance from training set only).
 
 **Key observations:**
-- The model converged very quickly: the best validation loss (0.1340) was reached at epoch 2, and early stopping halted training at epoch 7 after 5 consecutive non-improving epochs.
-- Despite having only 5153 parameters, the single-layer LSTM achieves a reasonable MSE on this 7-feature, 120-step forecasting task.
-- The early peak at epoch 2 followed by rising validation loss is a sign of mild overshoot. The lr=0.001 step size is slightly too large for this model to settle cleanly, which the Experiment 3 results confirm directly.
+- The best val loss (0.1334) was reached at epoch 10 — the model was still improving when the 10-epoch budget ran out. This immediately signals the baseline needs more training time.
+- Despite having only 5,153 parameters, the single-layer LSTM achieves a reasonable MSE on this 7-feature, 120-step forecasting task.
+- The 10-epoch ceiling motivated Experiments 1–4, which all use a 50-epoch budget so that convergence differences between architectures and learning rates can be observed properly.
 
 ---
 
 ## Task 2: LSTM Improvement Experiments
 
-Three controlled modifications were applied to the LSTM forecasting model, done one at a time in order to isolate each effect. All other hyperparameters remain identical to the baseline.
+Four controlled modifications were applied to the LSTM forecasting model, one at a time, to isolate each effect. Because the baseline hit the 10-epoch budget while still improving, **all four experiments use `epochs_exp=50`** (with patience=5 early stopping) to give each model sufficient time to converge. This makes the comparisons fair.
 
-### Experiment 1: Stacked LSTM (Two Layers)
+### Experiment 1: Extended Training Budget
 
-**Change:** Replace the single `LSTM(32)` with two stacked LSTM layers: `LSTM(32, return_sequences=True)` followed by `LSTM(32)`.
+**Change:** Keep the baseline LSTM(32) architecture and lr=0.001 exactly, but increase `max_epochs` from 10 → 50. This experiment establishes what the baseline actually achieves when it is no longer budget-limited.
+
+```python
+# Baseline
+epochs = 10
+# Experiment 1
+epochs_exp = 50
+```
+
+| Metric | Baseline (10 ep) | Extended (50 ep) |
+|---|---|---|
+| Val Loss (MSE) | 0.1334 | **0.1149** |
+| Parameters | 5,153 | 5,153 |
+| Best epoch | 10 of 10 | 21 of 26 |
+
+**Observation:** The same LSTM(32) model with lr=0.001, given 50 epochs, achieves val loss 0.1149 — a **13.8% improvement** over the 10-epoch baseline. The model converged at epoch 21, showing that the original 10-epoch budget was simply cutting off training too early. This result is the true baseline to compare the architectural experiments against.
+
+---
+
+### Experiment 2: Stacked LSTM (Two Layers)
+
+**Change:** Replace the single `LSTM(32)` with two stacked layers: `LSTM(32, return_sequences=True)` → `LSTM(32)`, using the 50-epoch budget.
 
 ```python
 # Baseline
@@ -214,22 +236,21 @@ x = keras.layers.LSTM(32, return_sequences=True)(inputs)
 lstm_out = keras.layers.LSTM(32)(x)
 ```
 
-**Motivation:** A second LSTM layer allows the model to learn higher-order temporal abstractions. The first layer captures low-level patterns (e.g., daily cycles), while the second layer can capture dependencies between those patterns.
+**Motivation:** A second LSTM layer allows the model to learn higher-order temporal abstractions. The first layer encodes low-level patterns (hourly trends), and the second layer can capture dependencies between those patterns (multi-day cycles).
 
-| Metric | Baseline | Stacked LSTM |
+| Metric | Baseline (10 ep) | Stacked LSTM (50 ep) |
 |---|---|---|
-| Val Loss (MSE) | 0.1340 | **0.1254** |
-| Parameters | 5153 | 13 473 |
-| Best epoch | 2 of 7 | 10 of 10 |
+| Val Loss (MSE) | 0.1334 | **0.1149** |
+| Parameters | 5,153 | 13,473 |
+| Best epoch | 10 of 10 | 19 of 24 |
 
-
-**Observation:** Stacking a second LSTM layer reduced val loss by 6.4%, by using 2.6× more parameters. Notably, the stacked model was still improving at epoch 10 when the training budget ran out (the baseline peaked at epoch 2), so the true best is likely lower still. The improvement suggests the second layer successfully encodes higher-order temporal structure, patterns across patterns, that the single hidden state cannot represent.
+**Observation:** Stacked LSTM reached the same val loss as Experiment 1 (0.1149, -13.8%), using 2.6× more parameters and converging 2 epochs faster (epoch 19 vs. 21). The equal result suggests depth doesn't add a clear advantage over simply training the single-layer model longer — both architectures converge to the same optimum on this task. The stacked model's extra parameters do not meaningfully expand the representational space needed for this problem.
 
 ---
 
-### Experiment 2: Larger Hidden Size
+### Experiment 3: Larger Hidden Size
 
-**Change:** Increase the LSTM hidden units from 32 to 64.
+**Change:** Increase LSTM units from 32 → 64 (single layer), using the 50-epoch budget.
 
 ```python
 # Baseline
@@ -239,24 +260,31 @@ lstm_out = keras.layers.LSTM(32)(inputs)
 lstm_out = keras.layers.LSTM(64)(inputs)
 ```
 
-**Motivation:** A larger hidden state gives the model more capacity to encode the 7-feature input sequence. With 32 units, the hidden state may be a bottleneck when compressing 120 timesteps × 7 features.
+**Motivation:** A larger hidden state should give the model more capacity to encode the 7-feature, 120-step input. With 32 units, the hidden state may be a bottleneck.
 
-| Metric | Baseline | LSTM (64 units) |
+| Metric | Baseline (10 ep) | LSTM(64) (50 ep) |
 |---|---|---|
-| Val Loss (MSE) | 0.1340 | 0.1356 |
-| Parameters | 5153 | 18 497 |
-| Best epoch | 2 of 7 | 10 of 10 |
+| Val Loss (MSE) | 0.1334 | 0.1475 ❌ |
+| Parameters | 5,153 | 18,497 |
+| Best epoch | 10 of 10 | 1 of 6 |
 
+**Observation:** LSTM(64) was the **worst result** — val loss increased +10.6%. The best checkpoint was at epoch 1 (0.1475) and the model degraded immediately for the next 5 consecutive epochs, triggering early stopping at epoch 6. Even with 50 epochs of budget, it never recovered.
 
-**Observation:** LSTM(64) was marginally worse than the baseline as it increased the validation loss by +1.1%. However, the key detail is in the convergence pattern. The baseline peaked at epoch 2 and degraded, meaning that it converged fast but to a slightly overshot minimum. LSTM(64) was still steadily improving through all 10 epochs when the budget ran out. This tells a different story than "the wider model is worse": it is actually converging to a competitive solution, just more slowly because a larger parameter space takes more gradient steps to organize.
+**Why didn't a larger hidden size help?** This failure is caused by the learning rate (0.001) being too large for the wider model:
 
-**Why didn't it help within the 10-epoch budget?** LSTM(64) has ~3.5× more parameters than LSTM(32). With the same learning rate (0.001) and the same number of epochs, each parameter receives fewer effective update steps relative to the complexity it needs to fit. The baseline LSTM(32) can "fill in" its simpler representation quickly; LSTM(64) needs more time to leverage its extra capacity. Given 20–30 epochs, LSTM(64) would likely surpass the baseline. The take-away is that **adding model capacity requires increasing the training budget proportionally**, especially when the learning rate is unchanged.
+- LSTM(64) has ~3.5× more parameters than LSTM(32), all concentrated in a single larger hidden state transition matrix (size 64×7 + 64×64 = ~4,500 weights in one layer vs ~1,500 for LSTM(32)).
+- With lr=0.001, the gradient step applied to this larger weight matrix is proportionally larger in magnitude, causing the optimizer to **overshoot the loss minimum in the very first epoch**.
+- Once overshot, the model cannot recover — every subsequent epoch lands in a region of worse loss, and early stopping cuts training at epoch 6.
+- Compare this to Experiment 2 (Stacked LSTM), which also has more parameters (~13k vs ~18k) but distributes them across two smaller matrices. Each layer receives smaller, more controlled gradient updates, so the overshoot problem is avoided entirely.
+- The fix for LSTM(64) would be to pair it with a lower learning rate (e.g., 0.0005 as in Experiment 4) — the extra capacity would then be usable.
+
+The key lesson: **increasing width concentrates more parameters into a single gradient step, amplifying the overshoot problem, while increasing depth spreads updates across layers and remains stable at the same learning rate.**
 
 ---
 
-### Experiment 3: Reduced Learning Rate (0.0005)
+### Experiment 4: Reduced Learning Rate
 
-**Change:** Reduce the Adam learning rate from 0.001 to 0.0005.
+**Change:** Lower the Adam learning rate from 0.001 to 0.0005 (baseline LSTM(32) architecture, 50-epoch budget).
 
 ```python
 # Baseline
@@ -266,15 +294,15 @@ optimizer=keras.optimizers.Adam(learning_rate=0.001)
 optimizer=keras.optimizers.Adam(learning_rate=0.0005)
 ```
 
-**Motivation:** A lower learning rate can lead to a more stable descent and help escape sharp local minima, at the cost of requiring more epochs to converge. With `max_epochs=10` and early stopping, this tests whether the default rate was too aggressive.
+**Motivation:** The baseline's overshoot behavior and Experiment 3's failure both point to lr=0.001 being slightly too large. A smaller step size should allow the optimizer to settle into a better minimum.
 
-| Metric | Baseline | LR = 0.0005 |
+| Metric | Baseline (10 ep) | LR = 0.0005 (50 ep) |
 |---|---|---|
-| Val Loss (MSE) | 0.1340 | **0.1115** |
-| Parameters | ~5k | ~5k |
-| Best epoch | 2 of 7 | 10 of 10 |
+| Val Loss (MSE) | 0.1334 | **0.1033** |
+| Parameters | 5,153 | 5,153 |
+| Best epoch | 10 of 10 | 30 of 35 |
 
-**Observation:** Halving the learning rate produced the **best result across all experiments** — a 16.8% reduction in val loss with zero additional parameters. Like the other experiments, it was still improving at epoch 10 when the budget ended, meaning the true optimum is likely even lower. The contrast with the baseline is clear: with lr=0.001 the model peaks at epoch 2 and degrades; with lr=0.0005 it keeps improving through all 10 epochs in a smooth monotonic curve. This is the defining sign that lr=0.001 was causing overshoot and lr=0.0005 enables stable, sustained learning.
+**Observation:** Reducing the learning rate produced the **best result of all experiments** — a **22.6% improvement** in val loss with zero additional parameters. The model converged at epoch 30, much later than all other experiments, confirming that lr=0.0005 is indeed more conservative and needs more steps to reach the optimum. The smooth, sustained descent all the way to epoch 30 is the hallmark of a well-calibrated learning rate for this model.
 
 ---
 
@@ -282,30 +310,32 @@ optimizer=keras.optimizers.Adam(learning_rate=0.0005)
 
 ### LSTM Forecasting Comparison Table (Jena Climate)
 
-| Experiment | Modification | Val Loss (MSE) | Change | Parameters | Epochs |
+| Experiment | Modification | Val Loss (MSE) | Change | Parameters | Best Epoch |
 |---|---|---|---|---|---|
-| Baseline | LSTM(32), lr=0.001 | 0.1340 | — | ~5k | 7 |
-| Exp 1 | Stacked LSTM (32→32) | 0.1254 | -6.4% ✅ | ~13k | 10 |
-| Exp 2 | LSTM(64), lr=0.001 | 0.1356 | +1.1% ❌ | ~18k | 10 |
-| **Exp 3** | **LSTM(32), lr=0.0005** | **0.1115** | **-16.8% ✅** | **~5k** | **10** |
+| Baseline | LSTM(32), lr=0.001, 10 ep | 0.1334 | — | 5,153 | 10/10 |
+| Exp 1 | Extended training (50 ep) | 0.1149 | -13.8% ✅ | 5,153 | 21/26 |
+| Exp 2 | Stacked LSTM (32→32), 50 ep | 0.1149 | -13.8% ✅ | 13,473 | 19/24 |
+| Exp 3 | LSTM(64), lr=0.001, 50 ep | 0.1475 | +10.6% ❌ | 18,497 | 1/6 |
+| **Exp 4** | **LSTM(32), lr=0.0005, 50 ep** | **0.1033** | **-22.6% ✅** | **5,153** | **30/35** |
 
-**Best result:** Reduced learning rate (Experiment 3) achieved the lowest val MSE (0.1115), a **16.8% improvement** over the baseline with no additional parameters. All three experiments hit the 10-epoch ceiling while still improving — a larger training budget would yield lower losses across the board.
+**Best result:** Reduced learning rate (Experiment 4) achieved the lowest val MSE (0.1033), a **22.6% improvement** over the baseline with no additional parameters.
 
 ### Transformer Classification Baseline (FordA)
 
 | Model | Test Accuracy | Parameters | Epochs |
 |---|---|---|---|
-| Transformer (this run) | ~51.6% (no convergence) | ~97k | 48 |
-| Transformer (Keras reference) | ~85% | ~97k | ~110–120 |
+| Transformer (this run) | ~51.6% (no convergence) | 29,258 | 11 |
+| Transformer (Keras reference) | ~85% | ~97,000 | ~110–120 |
 
 The Transformer was not modified as the improvement task focused on the LSTM notebook. The model failed to converge in this local run (see Baseline Results section for explanation).
 
 ### Takeaways
 
-- **Learning rate** was the most impactful single change: halving it (0.001 → 0.0005) gave a 16.8% val loss improvement at zero parameter cost, because the baseline lr=0.001 was causing the optimizer to overshoot past the optimum.
-- **Architecture depth** (stacking LSTM layers) gave a solid 6.4% improvement and was still converging at epoch 10 — with more training budget it would likely push further.
-- **Hidden size increase** (LSTM 64) marginally underperformed within 10 epochs because a larger model needs more gradient steps to converge. It was still improving at epoch 10, indicating it would surpass the baseline with a larger epoch budget.
-- The key practical lesson: **for small recurrent models on structured time-series, fix the learning rate before adding parameters**.
+- **Training budget** mattered most: the baseline was simply cut off too early (epoch 10). Extending to 50 epochs (Exp 1) immediately yielded a 13.8% improvement with zero changes to the model.
+- **Learning rate** was the decisive factor: halving lr (0.001 → 0.0005) gave the best result across all experiments (-22.6%), because lr=0.001 caused mild overshoot on this task.
+- **Stacked LSTM** matched the extended-training result (same 0.1149) using fewer epochs, showing depth provides a convergence speed advantage — but no accuracy advantage over the single-layer model given sufficient budget.
+- **Wider hidden size** (LSTM 64) backfired badly with lr=0.001 — peaked at epoch 1 and degraded immediately. Width amplifies the overshoot problem more than depth does, because it concentrates more parameters into a single gradient step rather than distributing them across layers.
+- The key practical lesson: **before changing architecture, ensure the training budget is sufficient and the learning rate is well-tuned.**
 
 ---
 
@@ -313,19 +343,21 @@ The Transformer was not modified as the improvement task focused on the LSTM not
 
 ### Which model did you find easier to understand and why?
 
-I found the LSTM model was easier to understand. Its architecture is linear and follows a single intuitive path, a recurrent layer processes the sequence step-by-step, building up a hidden state that summarizes past observations, and then a Dense layer maps that hidden state to a single output value. The connection between the model structure and the task (predicting future temperature from past readings) is immediately clear.
+I found the LSTM model easier to understand. Its architecture follows a single intuitive path: a recurrent layer processes the sequence step-by-step, building up a hidden state that summarizes past observations, and then a Dense layer maps that hidden state to a single output value. The connection between the model structure and the task (predicting future temperature from past readings) is immediately clear.
 
-The Transformer was more conceptually demanding. Multi-head self-attention requires understanding how queries, keys, and values are computed and combined, and why this allows any timestep to directly attend to any other regardless of distance. The Pre-LN residual structure, positional independence, and the role of the 1D convolutions as a position-wise feed-forward network all require more background knowledge to internalize. That said, once understood, the Transformer's architecture is quite modular and impressive, where each encoder block is identical and can be stacked freely.
+The Transformer was more conceptually demanding. Multi-head self-attention requires understanding how queries, keys, and values are computed and combined, and why this allows any timestep to directly attend to any other regardless of distance. The Pre-LN residual structure, positional independence, and the role of 1D convolutions as a position-wise feed-forward network all require more background to internalize. That said, once understood, the Transformer's architecture is modular and elegant — each encoder block is identical and can be stacked freely.
 
 ### What improvement did you try, and what did you learn from it?
 
-Three experiments were run on the LSTM forecasting model, and the most impactful was **reducing the learning rate** (Experiment 3). Halving lr from 0.001 to 0.0005 reduced validation MSE from 0.1340 to **0.1115** — a 16.8% improvement using the exact same architecture and parameter count.
+Four experiments were run on the LSTM forecasting model. The most impactful was **reducing the learning rate** (Experiment 4): halving lr from 0.001 to 0.0005 reduced validation MSE from 0.1334 to **0.1033** — a 22.6% improvement using the same architecture and parameters.
 
-The clearest signal is in the convergence patterns. With lr=0.001, the baseline peaks at epoch 2 and then degrades — a classic sign that the optimizer is taking steps too large to settle into a good minimum, bouncing past it each update. With lr=0.0005, the model keeps improving smoothly through all 10 epochs, suggesting each gradient step is landing in a progressively better region of the loss surface.
+The most instructive finding came from comparing the experiments. The baseline was hitting the 10-epoch budget while still improving, so Experiment 1 (same model, 50 epochs) showed that a 13.8% gain was available simply by training longer. Experiment 2 (Stacked LSTM) matched this exactly (0.1149), showing that architectural depth provides no additional benefit once the budget bottleneck is resolved.
 
-**Experiment 1 (Stacked LSTM)** gave a solid 6.4% improvement and was also still converging at epoch 10, showing that depth helps but requires more training time to pay off. **Experiment 2 (LSTM 64)** was only marginally worse than baseline (+1.1%), but importantly it was also still improving at epoch 10 — unlike the baseline which peaked at epoch 2. This means the wider model is not fundamentally broken; it simply needs more training steps to organize its larger parameter space. Given 20–30 epochs, LSTM(64) at lr=0.001 would likely surpass the baseline.
+Experiment 3 (LSTM 64) was the most surprising: it produced the *worst* result (+10.6% worse), peaking at epoch 1 and degrading for all subsequent epochs despite having 50 epochs available. The explanation is that doubling the hidden size concentrates ~3.5× more parameters into a single weight matrix, which makes gradient steps proportionally larger at lr=0.001, causing immediate overshoot that the model cannot recover from. Stacked LSTM (also more params) did not suffer this problem because depth distributes updates across two smaller matrices instead of one large one.
 
-Overall, the experiments show that **how you train matters as much as what you train**: a simple learning rate reduction outperformed both architectural changes within the given budget, and the architectural changes themselves were still improving when training ended.
+Experiment 4 confirmed the diagnosis: lr=0.0005 produced smooth, sustained improvement all the way to epoch 30, exactly the convergence behavior that lr=0.001 prevents.
+
+The overall lesson: **training budget and learning rate are prerequisites, not afterthoughts. Architectural changes only show their benefit once these are correctly set.**
 
 ---
 
