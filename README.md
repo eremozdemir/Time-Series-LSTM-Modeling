@@ -217,7 +217,7 @@ epochs_exp = 50
 ```
 
 | Metric | Baseline (10 ep) | Extended (50 max ep) |
-|---|---|---|---|
+|---|---|---|
 | Val Loss (MSE) | 0.1334 | **0.1149** |
 | Parameters | 5153 | 5153 |
 | Best epoch | 10 of 10 | 21 of 26 |
