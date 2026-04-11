@@ -159,7 +159,7 @@ Input (batch, 120, 7)
   - **Batch size:** 256
 
 ---
-<br><br/>
+
 ## Task 1: Baseline Results
 
 ### Transformer Baseline (FordA Classification)
@@ -200,7 +200,7 @@ All values are computed on normalized features (i.e., zero mean, unit variance f
 - The 10-epoch ceiling motivated Experiments 1–4, which all use a 50-epoch budget so that convergence differences between architectures and learning rates can be observed properly
 
 ---
-<br><br/>
+
 ## Task 2: LSTM Improvement Experiments
 
 Four controlled modifications were independently applied to the LSTM forecasting model in order to isolate experiment performance. Because the baseline hit the 10-epoch budget while still improving, all four experiments use `epochs_exp=50` (with patience=5 EarlyStopping) to give each model sufficient time to converge to standardize the experiment comparisons.
@@ -328,7 +328,7 @@ optimizer=keras.optimizers.Adam(learning_rate=0.0005)
 - The model converged at epoch 30, much later than all other experiments, confirming that lr=0.0005 is indeed more conservative and needs more steps to reach the optimum
 - The smooth, sustained descent all the way to epoch 30 is the hallmark of a well-calibrated learning rate for this model
 ---
-<br><br/>
+
 ## Task 3: Benchmark Summary
 
 ### Transformer Classification Baseline (FordA)
@@ -371,7 +371,7 @@ The Transformer was not modified as the improvement task focused on the LSTM not
 - The key practical lesson: before changing architecture, ensure the training budget is sufficient and the learning rate is well-tuned.
 
 ---
-<br><br/>
+
 ## Task 4: Discussion Questions
 
 ### Which model did you find easier to understand and why?
