@@ -7,7 +7,7 @@ env/
 __pycache__/
 *.py[cod]
 
-# Data and Models (Keep the repo light)
+# Data and Models
 *.csv
 *.h5
 *.checkpoint

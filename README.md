@@ -166,13 +166,13 @@ Input (batch, 120, 7)
 
 | Metric | This Run | Keras Example (Reference) |
 |---|---|---|
-| Training Accuracy | 49.8% | ~95% |
-| Validation Accuracy (best) | 49.4% | ~84% |
+| Training Accuracy | 49.9% | ~95% |
+| Validation Accuracy (best) | 51.3% | ~84% |
 | **Test Accuracy** | **51.6%** | **~85%** |
-| Epochs run (stopped early) | 11 | ~110–120 |
+| Epochs run (EarlyStopping) | 39 | ~110–120 |
 | Total parameters | 29 258 | ~97k |
 
-The model did not converge in this local run. The loss remained at ~0.693 (ln(2)) throughout all 11 epochs, indicating the model produced random binary predictions throughout. Early stopping triggered after epoch 11 once validation loss showed no improvement for 10 consecutive epochs.
+The model did not converge in this local run. The loss remained at ~0.693 (ln(2)) throughout all 39 epochs, indicating the model produced random binary predictions throughout. Early stopping triggered after epoch  once validation loss showed no improvement for 10 consecutive epochs.
 
 **Key observations:**
 - **Constant loss of ~0.693 equals ln(2):** 
@@ -335,8 +335,8 @@ optimizer=keras.optimizers.Adam(learning_rate=0.0005)
 
 | Model | Test Accuracy | Parameters | Epochs |
 |---|---|---|---|
-| Transformer (this run) | ~51.6% (no convergence) | 29,258 | 11 |
-| Transformer (Keras reference) | ~85% | ~97,000 | ~110–120 |
+| Transformer (this run) | ~51.6% (no convergence) | 29 258 | 39 |
+| Transformer (Keras reference) | ~85% | ~97k | ~110–120 |
 
 The Transformer was not modified as the improvement task focused on the LSTM notebook. The model failed to converge in this local run (see Baseline Results section for explanation).
 
