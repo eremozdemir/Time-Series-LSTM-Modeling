@@ -365,7 +365,7 @@ The Transformer was not modified as the improvement task focused on the LSTM not
   - This showed that depth does provides a convergence speed advantage
   - But no accuracy advantage over the single-layer model given sufficient budget
 - Wider hidden size (LSTM 64) backfired badly with lr=0.001:
-  — It peaked at epoch 1 and degraded immediately
+  - It peaked at epoch 1 and degraded immediately
   - Width amplifies the overshoot problem more than depth does, because it concentrates more parameters into a single gradient step rather than distributing them across layers
 
 - The key practical lesson: before changing architecture, ensure the training budget is sufficient and the learning rate is well-tuned.
